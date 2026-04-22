@@ -1,0 +1,29 @@
+# QQ Bot Data (runtime)
+data/
+logs/
+
+# NapCat data
+napcat/
+
+# Environment (contains API keys)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

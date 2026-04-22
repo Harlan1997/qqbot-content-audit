@@ -1,0 +1,22 @@
+[project]
+name = "qqbot-content-mod"
+version = "0.1.0"
+description = "QQ群聊内容审核机器人 - 基于 NoneBot2 + Gemini AI"
+requires-python = ">=3.10"
+dependencies = [
+    "nonebot2[fastapi]>=2.4.0",
+    "nonebot-adapter-onebot>=2.4.0",
+    "google-genai>=1.0.0",
+    "aiohttp>=3.9.0",
+    "aiosqlite>=0.20.0",
+    "Pillow>=10.0.0",
+    "pydantic>=2.0.0",
+]
+
+[tool.nonebot]
+adapters = [
+    { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" }
+]
+plugins = []
+plugin_dirs = ["src/plugins"]
+builtin_plugins = []

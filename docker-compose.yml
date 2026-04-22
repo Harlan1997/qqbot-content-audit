@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  # ========================================
+  # NapCat 协议端 - 负责维持 QQ 登录
+  # ========================================
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    container_name: napcat
+    restart: unless-stopped
+    environment:
+      - NAPCAT_GID=0
+      - NAPCAT_UID=0
+    ports:
+      # WebUI 管理面板 - 用于扫码登录和配置
+      - "6099:6099"
+      # HTTP API（可选）
+      - "3000:3000"
+    volumes:
+      # 持久化 QQ 数据和 NapCat 配置
+      - ./napcat/config:/app/napcat/config
+      - ./napcat/data:/app/.config/QQ
+    networks:
+      - bot-network
+
+  # ========================================
+  # NoneBot2 业务端 - 内容审核逻辑
+  # ========================================
+  bot:
+    build: .
+    container_name: qqbot
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      - napcat
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge
