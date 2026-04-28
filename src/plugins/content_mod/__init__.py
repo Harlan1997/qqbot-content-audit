@@ -65,6 +65,18 @@ def _load_config() -> ModConfig:
 
 # 加载配置并创建核心组件
 plugin_config = _load_config()
+
+# 加载动态添加的关键词
+from .admin import get_extra_keywords, get_settings
+extra_kws = get_extra_keywords()
+if extra_kws:
+    plugin_config.blocked_keywords.extend(extra_kws)
+
+# 加载动态设置 (如置信度)
+settings = get_settings()
+if "image_confidence_threshold" in settings:
+    plugin_config.image_confidence_threshold = float(settings["image_confidence_threshold"])
+
 moderator = ContentModerator(plugin_config)
 executor = ActionExecutor(plugin_config)
 

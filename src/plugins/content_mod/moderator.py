@@ -15,6 +15,11 @@ from nonebot import logger
 from openai import AsyncOpenAI
 from PIL import Image
 
+try:
+    from pypinyin import lazy_pinyin as _lazy_pinyin
+except ImportError:
+    _lazy_pinyin = None
+
 from .config import ModConfig
 from .models import ModerationResult, ViolationType
 
@@ -68,6 +73,12 @@ class ContentModerator:
         # 同时创建一个去除所有空白/特殊字符的版本
         stripped_text = re.sub(r'[\s\u200b\u200c\u200d\ufeff\u00a0]+', '', normalized_text)
 
+        # 转换为纯拼音字符串，例如 "它飞" -> "tafei"
+        if _lazy_pinyin:
+            pinyin_text = "".join(_lazy_pinyin(normalized_text)).lower()
+        else:
+            pinyin_text = ""
+
         # 1. 精确关键词匹配
         for keyword in self.config.blocked_keywords:
             keyword_lower = keyword.lower()
@@ -90,10 +101,23 @@ class ContentModerator:
                     reason=f"命中关键词变体: {keyword}",
                     matched_keyword=keyword,
                 )
+            # 检查拼音版本 (主要用于匹配用户用各种生僻字代替拼音词)
+            if pinyin_text and keyword_stripped in pinyin_text:
+                # 只有当 keyword 纯由字母组成时，在 pinyin 里匹配才有意义
+                # 如果 keyword 是 "塔菲"，在 pinyin "tafei" 里找 "塔菲" 是找不到的
+                # 但如果 keyword 是 "tafei"，在 "tafei" 里找 "tafei" 就能命中
+                if keyword_stripped.isascii() and keyword_stripped.isalpha():
+                    return ModerationResult(
+                        is_violation=True,
+                        violation_type=ViolationType.KEYWORD,
+                        confidence=0.9,
+                        reason=f"命中拼音变体: {keyword_stripped}",
+                        matched_keyword=keyword,
+                    )
 
         # 2. 正则模式匹配
         for i, pattern in enumerate(self._compiled_patterns):
-            match = pattern.search(normalized_text) or pattern.search(stripped_text)
+            match = pattern.search(normalized_text) or pattern.search(stripped_text) or (pinyin_text and pattern.search(pinyin_text))
             if match:
                 return ModerationResult(
                     is_violation=True,
