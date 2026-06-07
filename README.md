@@ -1,20 +1,20 @@
 # QQ 群聊内容审核机器人
 
-基于 **NoneBot2 + NapCat + SiliconFlow (Qwen2.5-VL)** 的群聊内容审核系统，自动检测并撤回违规消息。
+基于 **NoneBot2 + NapCat + SiliconFlow (Qwen3-VL-8B)** 的群聊内容审核系统，自动检测并撤回违规消息。
 
 ## ✨ 功能特性
 
 - 🔍 **关键词审核** — 检测"永雏塔菲"及其所有变体（谐音、拼音、拆字等，支持识别转发的图文卡片）
-- 🖼️ **AI 图片审核** — 使用 Qwen2.5-VL 多模态大模型智能识别违规图片/表情包
+- 🖼️ **AI 图片审核** — 使用 Qwen3-VL 多模态大模型智能识别违规图片/表情包
 - 🗑️ **自动撤回** — 违规消息自动撤回并发送警告
 - 📊 **违规记录** — SQLite 存储完整违规历史
 - 🛡️ **白名单** — 管理员可设置免审核用户
-- 🤖 **管理命令** — 完整的群内管理指令
+- 🤖 **管理命令** — 完整的群内管理指令（动态增删关键词、调整阈值等）
 
 ## 🏗️ 架构
 
 ```
-QQ 服务器 ←→ NapCat (协议端) ←→ NoneBot2 (业务端) ←→ 硅基流动 AI
+QQ 服务器 ←→ NapCat (协议端) ←→ NoneBot2 (业务端) ←→ SiliconFlow AI
                                        ↓
                                    SQLite 数据库
 ```
@@ -25,7 +25,7 @@ QQ 服务器 ←→ NapCat (协议端) ←→ NoneBot2 (业务端) ←→ 硅基
 
 - Docker & Docker Compose
 - 一个 QQ 小号（**⚠️ 不要使用主号**）
-- SiliconFlow API Key (硅基流动)
+- SiliconFlow API Key（硅基流动，用于图片审核）
 
 ### 步骤 1: 配置环境变量
 
@@ -35,7 +35,7 @@ cp .env.example .env
 
 编辑 `.env` 文件，填入：
 ```env
-GEMINI_API_KEY=你的Gemini-API-Key
+GEMINI_API_KEY=你的SiliconFlow-API-Key
 MOD_ADMIN_QQ=你的管理员QQ号
 MOD_GROUP_IDS=要审核的群号(逗号分隔，留空审核所有群)
 ```
@@ -74,16 +74,21 @@ docker-compose up -d
 | `/mod status` | 查看审核状态 |
 | `/mod log [数量]` | 查看违规记录 |
 | `/mod keywords` | 查看关键词列表 |
+| `/mod addkw [词]` | 动态添加关键词 |
+| `/mod rmkw [词]` | 动态删除关键词 |
+| `/mod setthresh [数字]` | 设置图片拦截置信度阈值 (0.0-1.0) |
 | `/mod whitelist` | 查看白名单 |
 | `/mod whitelist add @用户` | 加入白名单 |
 | `/mod whitelist remove @用户` | 移出白名单 |
+| `/mod audit on/off` | 开关管理员审核模式（测试用） |
 
 ## 🔧 本地开发（不使用 Docker）
 
 ```bash
 # 创建虚拟环境
 python -m venv .venv
-.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate   # Windows
 
 # 安装依赖
 pip install -e .
@@ -98,5 +103,5 @@ python bot.py
 
 1. **账号风险** — 使用第三方协议存在封号风险，请勿使用重要账号
 2. **撤回时限** — QQ 限制机器人管理员只能撤回 2 分钟内的消息
-3. **API 用量** — 图片审核会消耗 Gemini API 额度，请注意用量
+3. **API 用量** — 图片审核会消耗 SiliconFlow API 额度，请注意用量
 4. **误判处理** — AI 审核可能存在误判，建议设置白名单
