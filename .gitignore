@@ -25,5 +25,9 @@ env/
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
+
+# Misc
+qrcode.png

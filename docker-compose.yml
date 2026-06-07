@@ -11,11 +11,12 @@ services:
     environment:
       - NAPCAT_GID=0
       - NAPCAT_UID=0
+      - ACCOUNT=1192890143
     ports:
       # WebUI 管理面板 - 用于扫码登录和配置
-      - "6099:6099"
+      - "0.0.0.0:6099:6099"
       # HTTP API（可选）
-      - "3000:3000"
+      - "0.0.0.0:3000:3000"
     volumes:
       # 持久化 QQ 数据和 NapCat 配置
       - ./napcat/config:/app/napcat/config
@@ -33,7 +34,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8080:8080"
+      - "0.0.0.0:8080:8080"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

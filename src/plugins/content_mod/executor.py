@@ -30,7 +30,7 @@ class ActionExecutor:
         nickname = event.sender.nickname or str(user_id)
 
         # 1. 尝试撤回消息
-        recall_success = await self._recall_message(bot, message_id)
+        recall_success, recall_reason = await self._recall_message(bot, message_id)
         action_taken = "recall" if recall_success else "recall_failed"
 
         # 2. 获取用户违规历史
@@ -39,7 +39,7 @@ class ActionExecutor:
 
         # 3. 发送警告消息
         await self._send_warning(
-            bot, event, result, nickname, violation_count
+            bot, event, result, nickname, violation_count, recall_success, recall_reason
         )
 
         # 4. 记录到数据库
@@ -64,15 +64,52 @@ class ActionExecutor:
             f"累计违规: {violation_count}次"
         )
 
-    async def _recall_message(self, bot: Bot, message_id: int) -> bool:
+    async def _recall_message(self, bot: Bot, message_id: int) -> tuple[bool, str]:
         """撤回消息"""
         try:
             await bot.delete_msg(message_id=message_id)
             logger.info(f"[执行] 消息 {message_id} 撤回成功")
-            return True
+            return True, ""
         except Exception as e:
             logger.error(f"[执行] 消息 {message_id} 撤回失败: {e}")
-            return False
+            reason = "未知错误"
+            
+            from nonebot.exception import ActionFailed
+            if isinstance(e, ActionFailed):
+                retcode = getattr(e, "info", {}).get("retcode", None)
+                msg = getattr(e, "info", {}).get("message", "") or getattr(e, "info", {}).get("wording", "")
+                
+                if "decode failed" in msg and '"result": 7' in msg:
+                    reason = "由于目标用户是群主/管理员，或机器人没有管理员权限（被QQ拒绝）"
+                elif "result" in msg and "errMsg" in msg:
+                    try:
+                        import json
+                        start = msg.find("{")
+                        end = msg.rfind("}")
+                        if start != -1 and end != -1:
+                            json_str = msg[start:end+1]
+                            data = json.loads(json_str)
+                            err_msg = data.get("errMsg", "")
+                            result = data.get("result", "")
+                            if err_msg:
+                                if result == 7:
+                                    reason = "由于目标用户是群主/管理员，或机器人没有管理员权限"
+                                else:
+                                    reason = f"QQ内核错误: {err_msg} (代码 {result})"
+                            else:
+                                reason = f"QQ内核返回错误 (代码 {result})"
+                    except:
+                        pass
+                elif "timeout" in msg.lower():
+                    reason = "请求超时，可能消息已超过2分钟撤回时效"
+                elif retcode == 100:
+                    reason = "API不支持或消息不存在"
+                elif retcode == 1200:
+                    reason = "操作失败，可能消息已超过2分钟或已被撤回"
+            else:
+                reason = str(e)
+                
+            return False, reason
 
     async def _send_warning(
         self,
@@ -81,6 +118,8 @@ class ActionExecutor:
         result: ModerationResult,
         nickname: str,
         violation_count: int,
+        recall_success: bool = True,
+        recall_reason: str = "",
     ):
         """发送警告消息"""
         try:
@@ -89,6 +128,13 @@ class ActionExecutor:
                 base_msg = self.config.violation_reply_image
             else:
                 base_msg = self.config.violation_reply
+
+            if not recall_success:
+                failure_notice = f"撤回失败（原因：{recall_reason}），请管理员手动处理"
+                if "已被撤回" in base_msg:
+                    base_msg = base_msg.replace("已被撤回", failure_notice)
+                else:
+                    base_msg += f"（{failure_notice}）"
 
             # 构建警告消息
             warning_parts = []

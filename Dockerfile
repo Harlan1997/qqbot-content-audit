@@ -1,19 +1,16 @@
-FROM python:3.12-slim
+FROM docker.io/library/python:3.12-slim
 
 WORKDIR /app
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+# 配置 pip 使用腾讯云镜像
+RUN pip config set global.index-url https://pypi.org/simple/
 
 # 复制项目文件
 COPY pyproject.toml .
 COPY bot.py .
-COPY .env .
 COPY src/ src/
 
-# 安装 Python 依赖
+# 安装 Python 依赖（所有包均有预编译 wheel，无需 gcc）
 RUN pip install --no-cache-dir -e .
 
 # 创建数据目录

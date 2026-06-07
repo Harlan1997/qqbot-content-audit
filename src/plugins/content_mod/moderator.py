@@ -198,7 +198,7 @@ class ContentModerator:
 
             # 调用 OpenAI 格式 API
             response = await self.client.chat.completions.create(
-                model="Qwen/Qwen2.5-VL-72B-Instruct",
+                model="Qwen/Qwen3-VL-8B-Instruct",
                 messages=[
                     {
                         "role": "user",

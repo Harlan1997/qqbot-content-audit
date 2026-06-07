@@ -3,6 +3,8 @@
 """
 
 import asyncio
+import time
+from collections import defaultdict, deque
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -15,6 +17,17 @@ from .config import ModConfig
 from .moderator import ContentModerator
 from .executor import ActionExecutor
 from .database import is_whitelisted
+
+
+# ========================================
+# 跨消息上下文缓冲区（防拆字逃逸）
+# key: (group_id, user_id)
+# value: deque of (timestamp, message_id, text)
+# ========================================
+_MSG_WINDOW_SECONDS = 30   # 时间窗口：30 秒内
+_MSG_WINDOW_MAX = 2         # 只保留最近 2 条（上一条 + 当前条）
+
+_msg_buffer: dict[tuple, deque] = defaultdict(lambda: deque(maxlen=_MSG_WINDOW_MAX))
 
 
 async def process_group_message(
@@ -51,8 +64,8 @@ async def process_group_message(
     if await is_whitelisted(user_id):
         return
 
-    # 不审核管理员
-    if user_id in config.mod_admin_qq:
+    # 不审核管理员（除非开启了 audit_admin 测试模式）
+    if user_id in config.mod_admin_qq and not config.audit_admin:
         return
 
     # 不审核机器人自己
@@ -65,7 +78,15 @@ async def process_group_message(
     # 文本审核
     # ========================================
     text_content = _extract_text(message)
+
+    # 更新用户消息缓冲区
+    buf_key = (group_id, user_id)
+    now = time.time()
     if text_content:
+        _msg_buffer[buf_key].append((now, event.message_id, text_content))
+
+    if text_content:
+        # 1. 先检查单条消息
         text_result = moderator.check_text(text_content)
         if text_result.is_violation:
             logger.info(
@@ -73,7 +94,23 @@ async def process_group_message(
                 f"内容: {text_content[:100]} | 原因: {text_result.reason}"
             )
             await executor.handle_violation(bot, event, text_result)
-            return  # 已撤回，无需继续检查
+            _msg_buffer[buf_key].clear()  # 违规后清空缓冲区
+            return
+
+        # 2. 跨消息拼接检测（只看上一条 + 当前条）
+        if len(_msg_buffer[buf_key]) == 2:
+            prev_ts, _, prev_txt = _msg_buffer[buf_key][0]
+            if now - prev_ts <= _MSG_WINDOW_SECONDS:
+                combined_text = prev_txt + text_content
+                combined_result = moderator.check_text(combined_text)
+                if combined_result.is_violation:
+                    logger.info(
+                        f"[审核] 跨消息拼接违规 | 群 {group_id} | 用户 {user_id} | "
+                        f"拼合内容: {combined_text[:100]} | 原因: {combined_result.reason}"
+                    )
+                    await executor.handle_violation(bot, event, combined_result)
+                    _msg_buffer[buf_key].clear()
+                    return
 
     # ========================================
     # 图片/表情审核

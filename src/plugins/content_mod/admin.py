@@ -75,7 +75,7 @@ async def handle_status(bot: Bot, event: GroupMessageEvent):
 # ========================================
 # /mod log - 查看违规记录
 # ========================================
-mod_log = on_command("mod log", aliases={"违规记录"}, priority=5, block=True)
+mod_log = on_command("mod log", aliases={"违规记录", "mod logs"}, priority=5, block=True)
 
 
 @mod_log.handle()
@@ -311,6 +311,32 @@ async def handle_setthresh(bot: Bot, event: GroupMessageEvent, args: Message = C
 
 
 # ========================================
+# /mod audit - 开关管理员审核（测试模式）
+# ========================================
+mod_audit = on_command("mod audit", aliases={"管理员审核"}, priority=5, block=True)
+
+
+@mod_audit.handle()
+async def handle_audit(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    if not _is_admin(event.user_id):
+        await mod_audit.finish("❌ 无权限，仅管理员可用。")
+
+    arg = args.extract_plain_text().strip().lower()
+    if arg == "on":
+        _config.audit_admin = True
+        await mod_audit.finish("✅ 已开启管理员审核模式，管理员发送的内容将被检测。")
+    elif arg == "off":
+        _config.audit_admin = False
+        await mod_audit.finish("✅ 已关闭管理员审核模式，恢复正常。")
+    else:
+        status = "已开启" if _config.audit_admin else "已关闭"
+        await mod_audit.finish(
+            f"🔍 管理员审核模式当前状态: {status}\n"
+            "用法: /mod audit on 开启 | /mod audit off 关闭"
+        )
+
+
+# ========================================
 # /mod help - 帮助信息
 # ========================================
 mod_help = on_command("mod help", aliases={"审核帮助"}, priority=5, block=True)
@@ -330,6 +356,7 @@ async def handle_help(bot: Bot, event: GroupMessageEvent):
         "👤 /mod whitelist - 查看白名单\n"
         "➕ /mod whitelist add @用户 - 加入白名单\n"
         "➖ /mod whitelist remove @用户 - 移出白名单\n"
+        "🔍 /mod audit on/off - 开关管理员审核（测试用）\n"
         "❓ /mod help - 查看帮助"
     )
     await mod_help.finish(help_msg)
