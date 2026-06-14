@@ -6,7 +6,8 @@
 LOG_FILE="/home/admin/qqbot/logs/watchdog.log"
 CONTAINER="napcat"
 COOLDOWN_FILE="/tmp/qqbot-watchdog-cooldown"
-COOLDOWN_SECONDS=300  # 5分钟冷却，防止反复重启
+COOLDOWN_SECONDS=300      # 普通重启冷却 5 分钟
+QR_COOLDOWN_SECONDS=90    # 扫码等待时冷却 90 秒（二维码有效期约 2 分钟）
 QRCODE_LOCAL="/home/admin/qqbot/qrcode.png"
 
 # OneBot v11 HTTP API（容器内 3000 端口映射到宿主机 3000）
@@ -93,16 +94,19 @@ ${qr_url}
 }
 
 # ===== 冷却检查 =====
+# 用法: check_cooldown "原因" [冷却秒数]
+# 第二个参数可选，默认使用 COOLDOWN_SECONDS
 
 check_cooldown() {
     local reason="$1"
+    local cooldown="${2:-$COOLDOWN_SECONDS}"
     if [ -f "$COOLDOWN_FILE" ]; then
         local last_restart now elapsed remaining
         last_restart=$(cat "$COOLDOWN_FILE")
         now=$(date +%s)
         elapsed=$((now - last_restart))
-        if [ "$elapsed" -lt "$COOLDOWN_SECONDS" ]; then
-            remaining=$((COOLDOWN_SECONDS - elapsed))
+        if [ "$elapsed" -lt "$cooldown" ]; then
+            remaining=$((cooldown - elapsed))
             log "⏳ 冷却中（还需 ${remaining}s），跳过。原因: $reason"
             return 1
         fi
@@ -158,7 +162,8 @@ do_restart() {
 if ! podman ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
     if podman ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
         log "⚠️ 容器 ${CONTAINER} 已退出"
-        check_cooldown "容器已退出" && do_restart "容器已退出，自动重启"
+        # 容器退出大概率需要扫码，用短冷却期快速刷新二维码
+        check_cooldown "容器已退出" "$QR_COOLDOWN_SECONDS" && do_restart "容器已退出，自动重启"
     else
         log "❌ 容器 ${CONTAINER} 不存在"
     fi
@@ -177,7 +182,8 @@ if [ "$API_EXIT_CODE" -ne 0 ]; then
     # 检查最近日志是否有活跃信号（给刚启动的容器一个缓冲期）
     RECENT_LOGS=$(podman logs --since "3m" "$CONTAINER" 2>&1)
     if echo "$RECENT_LOGS" | grep -q "请扫描下面的二维码"; then
-        check_cooldown "API 不可达 + 等待扫码" && do_restart "API 不可达，检测到需要扫码"
+        # 等待扫码状态用短冷却期，确保二维码过期前自动刷新
+        check_cooldown "API 不可达 + 等待扫码" "$QR_COOLDOWN_SECONDS" && do_restart "API 不可达，检测到需要扫码"
     elif echo "$RECENT_LOGS" | grep -q "NapCat Shell App Loading\|等待网络连接\|正在快速登录"; then
         log "ℹ️ 容器正在启动中，等待下次检查"
     else
